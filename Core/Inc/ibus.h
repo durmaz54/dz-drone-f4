@@ -15,7 +15,7 @@
 #define IBUS_LENGTH					0x20
 #define IBUS_COMMAND				0x40
 #define FAILSAFE_ACTIVE				1000
-#define FAILSAFE_OFF				0
+#define FAILSAFE_OFF				10
 
 void ibus_read(UART_HandleTypeDef* uartx, uint16_t* data);
 

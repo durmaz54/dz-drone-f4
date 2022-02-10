@@ -16,6 +16,7 @@ void ibus_read(UART_HandleTypeDef* uartx, uint16_t* data){
 			for (uint8_t i = 0; i < IBUS_USER_CHANNELS * 2; i+=2) {
 
 				data[(i/2)+1] = (rxData[4+i] << 8) | rxData[3+i];
+				data[(i/2)+1] = data[(i/2)+1] - (data[(i/2)+1] % 10);
 				if(data[1] >2500){
 					data[0] = FAILSAFE_ACTIVE;
 				}
