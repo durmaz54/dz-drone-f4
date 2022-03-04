@@ -33,11 +33,13 @@ typedef struct
     float roll;
     float yaw;
 
+    float deltat;
+
 } MPU9255_t;
 
 uint8_t MPU9255_Init(I2C_HandleTypeDef *I2Cx);
 
-void readAll(I2C_HandleTypeDef *I2Cx, MPU9255_t*DataStruct);
+void readAll(I2C_HandleTypeDef *I2Cx, MPU9255_t* DataStruct);
 
 void getMres();
 void getGres();

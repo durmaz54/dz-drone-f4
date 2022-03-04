@@ -209,6 +209,8 @@ void readAll(I2C_HandleTypeDef *I2Cx, MPU9255_t*DataStruct) {
 	DataStruct->pitch = pitch;
 	DataStruct->roll = roll;
 
+	DataStruct->deltat = deltat;
+
 	sum = 0;
 	}
 
