@@ -21,10 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdbool.h"
 #include "ibus.h"
 #include "motor.h"
 #include "mpu9255.h"
+#include "cdkit.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,16 +52,20 @@ UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
 uint16_t rcData[16];
+bool isAutonom = false;
 struct motors motors;
 MPU9255_t MPU9255;
 int16_t yaw, pitch, roll;
 int16_t throttle;
 float pid_error_temp;
-float pid_i_mem_roll, pid_roll_setpoint, pid_output_roll,
+float pid_i_mem_roll, pid_output_roll,
 		pid_last_roll_d_error;
-float pid_i_mem_pitch, pid_pitch_setpoint, pid_output_pitch,
+
+int16_t pid_roll_setpoint, pid_pitch_setpoint,pid_yaw_setpoint;
+
+float pid_i_mem_pitch, pid_output_pitch,
 		pid_last_pitch_d_error;
-float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw,
+float pid_i_mem_yaw, gyro_yaw_input, pid_output_yaw,
 		pid_last_yaw_d_error;
 
 float gyro_pitch_input, gyro_roll_input;
@@ -222,14 +227,12 @@ int main(void) {
 	 ibus_read(&huart2, rcData);
 	 }
 
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET); //led yan
 
 	HAL_Delay(2000);
 	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
 		escCalibration();
 	}
-
-	//led yan
 
 
 	/* USER CODE END 2 */
@@ -237,8 +240,6 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
-
-
 
 		ibus_read(&huart2, rcData);
 		readAll(&hi2c2, &MPU9255);
@@ -248,9 +249,19 @@ int main(void) {
 		gyro_roll_input = MPU9255.roll;
 		throttle = rcData[3];
 
-		pid_roll_setpoint = (rcData[1] - 1500) / 30;
-		pid_pitch_setpoint = (rcData[2] - 1500) / 30;
-		pid_yaw_setpoint = (rcData[4] - 1500) / 30;
+		if((rcData[5] > 1800) & (rcData[5] < 2100)){
+			isAutonom = true;
+			cdkit_read(huart6, &pid_yaw_setpoint, &pid_pitch_setpoint, &pid_roll_setpoint);
+
+		}
+		else{
+			isAutonom = false;
+			pid_roll_setpoint = (rcData[1] - 1500) / 30;
+			pid_pitch_setpoint = (rcData[2] - 1500) / 30;
+			pid_yaw_setpoint = (rcData[4] - 1500) / 30;
+		}
+
+
 
 		if (rcData[0] == FAILSAFE_ACTIVE) {
 			motors.motor1 = 1000;
