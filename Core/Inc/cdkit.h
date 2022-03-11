@@ -19,24 +19,14 @@
 
 void cdkit_read(UART_HandleTypeDef UARTx, int16_t *setpointYaw, int16_t *setpointPitch, int16_t *setpointRoll);
 
-void droneYawRight(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-
-
-
-void droneYawLeft(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-
-void dronePitchForward(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-void dronePitchBack(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-
-void droneRollRight(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-void droneRollLeft(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-
-
+void droneStop();
+void droneSetHeight(int16_t maxHeight);
+void droneYawRight();
+void droneYawLeft();
+void dronePitchForward();
+void dronePitchBack();
+void droneRollRight();
+void droneRollLeft();
+void droneSetHeight(int16_t maxHeight);
 
 #endif /* INC_CDKIT_H_ */

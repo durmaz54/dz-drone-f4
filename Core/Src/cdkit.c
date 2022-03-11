@@ -7,9 +7,18 @@
 
 #include "cdkit.h"
 
+void* cd_setpointPitch;
+void* cd_setpointYaw;
+void* cd_setpointRoll;
+
+
 void cdkit_read(UART_HandleTypeDef UARTx, int16_t *setpointYaw,
 		int16_t *setpointPitch, int16_t *setpointRoll) {
 	char data[5];
+
+	cd_setpointPitch = setpointPitch;
+	cd_setpointYaw = setpointYaw;
+	cd_setpointRoll = setpointRoll;
 
 	HAL_UART_Receive(&UARTx, data, 4, 50);
 
@@ -47,23 +56,25 @@ void cdkit_read(UART_HandleTypeDef UARTx, int16_t *setpointYaw,
 
 }
 
-void droneYawRight(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll){
 
-	*setpointYaw = 5;
+void droneStop(){
 
 }
-void droneYawLeft(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
 
-void dronePitchForward(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
+void droneSetHeight(int16_t maxHeight){
 
+}
 
-void dronePitchBack(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
+void droneYawRight(){
 
-void droneRollRight(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
-void droneRollLeft(int16_t *setpointYaw, int16_t *setpointPitch,
-		int16_t *setpointRoll);
+}
+void droneYawLeft();
+
+void dronePitchForward(){
+	*cd_setpointPitch = 5;
+}
+
+void dronePitchBack();
+
+void droneRollRight();
+void droneRollLeft();
