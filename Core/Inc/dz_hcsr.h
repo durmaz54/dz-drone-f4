@@ -7,7 +7,7 @@
 
 #ifndef INC_DZ_HCSR_H_
 #define INC_DZ_HCSR_H_
-
+#include "stm32f4xx.h"
 
 void dz_hcsr_read(int16_t *frontCm);
 

@@ -7,9 +7,9 @@
 
 #include "cdkit.h"
 
-void* cd_setpointPitch;
-void* cd_setpointYaw;
-void* cd_setpointRoll;
+int16_t* cd_setpointPitch;
+int16_t* cd_setpointYaw;
+int16_t* cd_setpointRoll;
 
 
 void cdkit_read(UART_HandleTypeDef UARTx, int16_t *setpointYaw,

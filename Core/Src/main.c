@@ -27,6 +27,7 @@
 #include "mpu9255.h"
 #include "cdkit.h"
 #include "BMP180.h"
+#include "dz_hcsr.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +53,12 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
+char pidUartData[10];
+int8_t pidUartint[10];
+char pidUartd[8];
+char pidUarti[8];
+char pidUartp[8];
+
 
 int8_t testData;
 float temperature;
@@ -79,13 +86,13 @@ float pid_i_mem_yaw, gyro_yaw_input, pid_output_yaw,
 int16_t gyro_pitch_input, gyro_roll_input;
 
 float pid_p_gain_roll =	2;               //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.0005;              //Gain setting for the roll I-controller
-float pid_d_gain_roll = 40.0;    //18           //Gain setting for the roll D-controller
+float pid_i_gain_roll = 0.05;              //Gain setting for the roll I-controller
+float pid_d_gain_roll = 15.0;    //18           //Gain setting for the roll D-controller
 int pid_max_roll = 500;                    //Maximum output of the PID-controller (+/-)
 
 float pid_p_gain_pitch = 2;  //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = 0.0005;  //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = 40;  //Gain setting for the pitch D-controller.
+float pid_i_gain_pitch = 0.05;  //Gain setting for the pitch I-controller.
+float pid_d_gain_pitch = 15;  //Gain setting for the pitch D-controller.
 int pid_max_pitch = 500;          //Maximum output of the PID-controller (+/-)
 
 float pid_p_gain_yaw = 4.0;                //Gain setting for the pitch P-controller. //4.0
@@ -198,7 +205,10 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+
+
+
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -261,16 +271,36 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
 
+		HAL_UART_Receive(&huart6, pidUartData, 7, 100);
+
+		if(pidUartData[0] == 'p'){
+			for (int8_t var = 0; var < 6; ++ var) {
+				pidUartint[var] = pidUartData[var+1] - 48;
+			}
+				//p dd pp ii
+				//p 25 1.2 0.054
+			pid_d_gain_pitch = ((float)pidUartint[0] * 10) + (float)pidUartint[1];
+			pid_d_gain_roll = ((float)pidUartint[0] * 10) + (float)pidUartint[1];
+
+			pid_p_gain_pitch = (float)pidUartint[2] + ((float)pidUartint[3] / 10);
+			pid_p_gain_roll = pidUartint[2] + (pidUartint[3] / 10);
+
+			pid_i_gain_roll = ((float)pidUartint[4] / 100) + ((float)pidUartint[5] / 1000);
+			pid_i_gain_pitch = ((float)pidUartint[4] / 100) + ((float)pidUartint[5] / 1000);
+
+		}
+
+
 			ibus_read(&huart2, rcData);
 			readAll(&hi2c2, &MPU9255);
-			dz_hcsr_read(&frontCm);
+
 			altitude = BMP180_GetAlt(0);
 			gyro_yaw_input = 0;
 			gyro_pitch_input = MPU9255.pitch;
 			gyro_roll_input = MPU9255.roll;
 
 
-			sprintf(bleData, "p= %d r= %d \n", gyro_pitch_input, gyro_roll_input);
+			sprintf(bleData, "p= %.2fd=%.2f i=%.4f roll=%d \n", pid_p_gain_pitch, pid_d_gain_pitch, pid_i_gain_pitch,gyro_roll_input);
 			HAL_UART_Transmit(&huart6, bleData, sizeof(bleData), 100);
 
 		throttle = rcData[3];
@@ -287,14 +317,6 @@ int main(void)
 			pid_yaw_setpoint = (rcData[4] - 1500) / 30;
 		}
 
-		if(frontCm < 60){
-			dronePitchBack(&pid_yaw_setpoint, &pid_pitch_setpoint, &pid_roll_setpoint);
-			droneStop(&pid_yaw_setpoint, &pid_pitch_setpoint, &pid_roll_setpoint);
-			droneSetHeight(70);
-			dronePitchForward(&pid_yaw_setpoint, &pid_pitch_setpoint, &pid_roll_setpoint);
-			droneSetHeight(200);
-			//freertos
-		}
 
 		if (rcData[0] == FAILSAFE_ACTIVE) {
 			motors.motor1 = 1000;
