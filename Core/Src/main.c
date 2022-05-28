@@ -24,10 +24,9 @@
 #include "stdbool.h"
 #include "ibus.h"
 #include "motor.h"
-#include "mpu9255.h"
-#include "cdkit.h"
-#include "BMP180.h"
-#include "dz_hcsr.h"
+#include "bno055_stm32.h"
+#include "math.h"
+#include "dz_pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,53 +52,16 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
-char pidUartData[10];
-int8_t pidUartint[10];
-char pidUartd[8];
-char pidUarti[8];
-char pidUartp[8];
 
-
-int8_t testData;
-float temperature;
-float pressure;
-float altitude;
-int16_t frontCm;
 uint16_t rcData[16];
-char bleData[32];
-bool isAutonom = false;
 struct motors motors;
-MPU9255_t MPU9255;
-int16_t yaw, pitch, roll;
-int16_t throttle;
-float pid_error_temp;
-float pid_i_mem_roll, pid_output_roll,
-		pid_last_roll_d_error;
-
-int16_t pid_roll_setpoint, pid_pitch_setpoint,pid_yaw_setpoint;
-
-float pid_i_mem_pitch, pid_output_pitch,
-		pid_last_pitch_d_error;
-float pid_i_mem_yaw, gyro_yaw_input, pid_output_yaw,
-		pid_last_yaw_d_error;
-
-int16_t gyro_pitch_input, gyro_roll_input;
-
-float pid_p_gain_roll =	2;               //Gain setting for the roll P-controller
-float pid_i_gain_roll = 0.05;              //Gain setting for the roll I-controller
-float pid_d_gain_roll = 15.0;    //18           //Gain setting for the roll D-controller
-int pid_max_roll = 500;                    //Maximum output of the PID-controller (+/-)
-
-float pid_p_gain_pitch = 2;  //Gain setting for the pitch P-controller.
-float pid_i_gain_pitch = 0.05;  //Gain setting for the pitch I-controller.
-float pid_d_gain_pitch = 15;  //Gain setting for the pitch D-controller.
-int pid_max_pitch = 500;          //Maximum output of the PID-controller (+/-)
-
-float pid_p_gain_yaw = 4.0;                //Gain setting for the pitch P-controller. //4.0
-float pid_i_gain_yaw = 0.02;               //Gain setting for the pitch I-controller. //0.02
-float pid_d_gain_yaw = 0.0;                //Gain setting for the pitch D-controller.
-int pid_max_yaw = 500;
-
+int16_t yaw, pitch, roll, throttle;
+int16_t gyro, acc, mag;
+int16_t rc_yaw, rc_pitch, rc_roll;
+bno055_vector_t BNO55_str;
+bno055_calibration_state_t bno_state;
+bno055_calibration_data_t bno_data;
+char controlData[50];
 
 /* USER CODE END PV */
 
@@ -117,73 +79,6 @@ uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min,
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void escCalibration() {
-	while (1) {
-		ibus_read(&huart2, rcData);
-		motors.motor1 = rcData[3];
-		motors.motor2 = rcData[3];
-		motors.motor3 = rcData[3];
-		motors.motor4 = rcData[3];
-		motor_Write(&motors);
-		HAL_Delay(200);
-		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-
-	}
-
-}
-
-void calculate_pid() {
-	//Roll calculations
-	pid_error_temp = gyro_roll_input - pid_roll_setpoint;
-	pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
-	if (pid_i_mem_roll > pid_max_roll)
-		pid_i_mem_roll = pid_max_roll;
-	else if (pid_i_mem_roll < pid_max_roll * -1)
-		pid_i_mem_roll = pid_max_roll * -1;
-
-	pid_output_roll = pid_p_gain_roll * pid_error_temp + pid_i_mem_roll
-			+ pid_d_gain_roll * (pid_error_temp - pid_last_roll_d_error);
-	if (pid_output_roll > pid_max_roll)
-		pid_output_roll = pid_max_roll;
-	else if (pid_output_roll < pid_max_roll * -1)
-		pid_output_roll = pid_max_roll * -1;
-
-	pid_last_roll_d_error = pid_error_temp;
-
-	//Pitch calculations
-	pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
-	pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
-	if (pid_i_mem_pitch > pid_max_pitch)
-		pid_i_mem_pitch = pid_max_pitch;
-	else if (pid_i_mem_pitch < pid_max_pitch * -1)
-		pid_i_mem_pitch = pid_max_pitch * -1;
-
-	pid_output_pitch = pid_p_gain_pitch * pid_error_temp + pid_i_mem_pitch
-			+ pid_d_gain_pitch * (pid_error_temp - pid_last_pitch_d_error);
-	if (pid_output_pitch > pid_max_pitch)
-		pid_output_pitch = pid_max_pitch;
-	else if (pid_output_pitch < pid_max_pitch * -1)
-		pid_output_pitch = pid_max_pitch * -1;
-
-	pid_last_pitch_d_error = pid_error_temp;
-
-	//Yaw calculations
-	pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
-	pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
-	if (pid_i_mem_yaw > pid_max_yaw)
-		pid_i_mem_yaw = pid_max_yaw;
-	else if (pid_i_mem_yaw < pid_max_yaw * -1)
-		pid_i_mem_yaw = pid_max_yaw * -1;
-
-	pid_output_yaw = pid_p_gain_yaw * pid_error_temp + pid_i_mem_yaw
-			+ pid_d_gain_yaw * (pid_error_temp - pid_last_yaw_d_error);
-	if (pid_output_yaw > pid_max_yaw)
-		pid_output_yaw = pid_max_yaw;
-	else if (pid_output_yaw < pid_max_yaw * -1)
-		pid_output_yaw = pid_max_yaw * -1;
-
-	pid_last_yaw_d_error = pid_error_temp;
-}
 
 /* USER CODE END PFP */
 
@@ -205,10 +100,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-
-
-
-	HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -230,40 +122,49 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	// yukarıdaki alanda cubemx önce usart2'yi init ediyor sonra dma'yı init ediyordu bu yanlış.
 	// doğrusu benim kullandığım olacak.
+
 	motors.timx = &htim4;
 	motor_Init(&motors);
-	//__HAL_TIM_SET_COUNTER(&htim1, 0);
-	//HAL_TIM_Base_Start(&htim1);
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
 
-	BMP180_Start();
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
+	sprintf(controlData, "deneme");
+
+	bno055_assignI2C(&hi2c2);
+	while(bno055_setup()){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
+		HAL_Delay(200);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+		HAL_Delay(200);
+		HAL_UART_Transmit(&huart6, controlData, 50, 100);
+
+	}
+	bno055_enableExternalCrystal();
+	bno055_opmode_t moded;
+	moded = bno055_getOperationMode();
+	moded = BNO055_OPERATION_MODE_NDOF;
+	bno055_setOperationMode(moded);
+	moded = bno055_getOperationMode();
+
+	while(1){
+		bno_state = bno055_getCalibrationState();
+		if((bno_state.gyro >= 0) && (bno_state.mag >=2)){
+			break;
+		}
+		HAL_Delay(10);
+	}
+
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+
 	/*
 	while(1){
-		temperature = BMP180_GetTemp();
-		altitude = BMP180_GetAlt(0);
-		pressure = BMP180_GetPress(0);
-		sprintf(bleData, "temp=%.2f m%.2f\n", temperature, altitude);
-		HAL_UART_Transmit(&huart6, bleData, sizeof(bleData), 100);
-		HAL_Delay(100);
-	}
-	*/
-	while (MPU9255_Init(&hi2c2) == 1) {
-		HAL_Delay(100);
-	}
+		BNO55_str = bno055_getVectorEuler();
+		yaw = (int16_t)BNO55_str.x;
+		roll = (int16_t)BNO55_str.y;
+		pitch = (int16_t)BNO55_str.z;
+		bno_state = bno055_getCalibrationState();
+		HAL_Delay(10);
 
-
-	 while(!(rcData[0] == FAILSAFE_OFF)){
-	 HAL_Delay(100);
-	 ibus_read(&huart2, rcData);
-	 }
-
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET); //led yan
-
-	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
-		escCalibration();
-	}
-
-
+	}	*/
 
   /* USER CODE END 2 */
 
@@ -271,137 +172,49 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
 
-		HAL_UART_Receive(&huart6, pidUartData, 7, 100);
-
-		if(pidUartData[0] == 'p'){
-			for (int8_t var = 0; var < 6; ++ var) {
-				pidUartint[var] = pidUartData[var+1] - 48;
-			}
-				//p dd pp ii
-				//p 25 1.2 0.054
-			pid_d_gain_pitch = ((float)pidUartint[0] * 10) + (float)pidUartint[1];
-			pid_d_gain_roll = ((float)pidUartint[0] * 10) + (float)pidUartint[1];
-
-			pid_p_gain_pitch = (float)pidUartint[2] + ((float)pidUartint[3] / 10);
-			pid_p_gain_roll = pidUartint[2] + (pidUartint[3] / 10);
-
-			pid_i_gain_roll = ((float)pidUartint[4] / 100) + ((float)pidUartint[5] / 1000);
-			pid_i_gain_pitch = ((float)pidUartint[4] / 100) + ((float)pidUartint[5] / 1000);
-
-		}
-
-
-			ibus_read(&huart2, rcData);
-			readAll(&hi2c2, &MPU9255);
-
-			altitude = BMP180_GetAlt(0);
-			gyro_yaw_input = 0;
-			gyro_pitch_input = MPU9255.pitch;
-			gyro_roll_input = MPU9255.roll;
-
-
-			sprintf(bleData, "p= %.2fd=%.2f i=%.4f roll=%d \n", pid_p_gain_pitch, pid_d_gain_pitch, pid_i_gain_pitch,gyro_roll_input);
-			HAL_UART_Transmit(&huart6, bleData, sizeof(bleData), 100);
-
+		ibus_read(&huart2, rcData);
 		throttle = rcData[3];
+		rc_roll = (1500 - rcData[1]) / 50;
+		rc_pitch = (1500 - rcData[2]) / 50;
+		rc_yaw =  (1500- rcData[4]) / 50;
 
-		if((rcData[5] > 1800) & (rcData[5] < 2100)){
-			isAutonom = true;
-			cdkit_read(huart6, &pid_yaw_setpoint, &pid_pitch_setpoint, &pid_roll_setpoint);
+		BNO55_str = bno055_getVectorEuler();
+		yaw = (int16_t)BNO55_str.x;
+		roll = (int16_t)BNO55_str.y;
+		pitch = (int16_t)BNO55_str.z;
 
+
+
+		if((rcData[0] != FAILSAFE_OFF) | (throttle < 1100)){
+			pidRollReset();
+			motors.motor1 = 1000;
+			motors.motor2 = 1000;
+			motor_Write(&motors);
+			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
 		}
+
 		else{
-			isAutonom = false;
-			pid_roll_setpoint = (rcData[1] - 1500) / 30;
-			pid_pitch_setpoint = (rcData[2] - 1500) / 30;
-			pid_yaw_setpoint = (rcData[4] - 1500) / 30;
-		}
-
-
-		if (rcData[0] == FAILSAFE_ACTIVE) {
-			motors.motor1 = 1000;
-			motors.motor2 = 1000;
-			motors.motor3 = 1000;
-			motors.motor4 = 1000;
-			motor_Write(&motors);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
-		}
-		else if(throttle < 1200){
-
-			motors.motor1 = 1000;
-			motors.motor2 = 1000;
-			motors.motor3 = 1000;
-			motors.motor4 = 1000;
-			motor_Write(&motors);
-
-		    pid_i_mem_roll = 0;
-		    pid_last_roll_d_error = 0;
-		    pid_i_mem_pitch = 0;
-		    pid_last_pitch_d_error = 0;
-		    pid_i_mem_yaw = 0;
-		    pid_last_yaw_d_error = 0;
-		}
-
-		else {
-
-
-			calculate_pid();
-
-			if (throttle > 1800) {
-				throttle = 1800;
-			}
-
-			motors.motor1 = throttle + pid_output_pitch + pid_output_roll // ön sağ
-					+ pid_output_yaw;
-			motors.motor2 = throttle - pid_output_pitch - pid_output_roll // arka sol
-					+ pid_output_yaw;
-			motors.motor3 = throttle + pid_output_pitch - pid_output_roll // ön sol
-					- pid_output_yaw;
-			motors.motor4 = throttle - pid_output_pitch + pid_output_roll // arka sağ
-					- pid_output_yaw;
-
-			/*
-			 motors.motor1 = throttle - pid_output_pitch + pid_output_roll // ön sağ
-					- pid_output_yaw;
-			motors.motor4 = throttle + pid_output_pitch + pid_output_roll // arka sağ
-					+ pid_output_yaw;
-			motors.motor3 = throttle + pid_output_pitch - pid_output_roll // ön sol
-					- pid_output_yaw;
-			motors.motor2 = throttle - pid_output_pitch - pid_output_roll // arka sol
-					+ pid_output_yaw;
-			 */
-
-			if (motors.motor1 < 1100) {
-				motors.motor1 = 1100;
-			}
-			if (motors.motor2 < 1100) {
-				motors.motor2 = 1100;
-			}
-			if (motors.motor3 < 1100) {
-				motors.motor3 = 1100;
-			}
-			if (motors.motor4 < 1100) {
-				motors.motor4 = 1100;
-			}
-
-			if (motors.motor1 > 2000) {
+			int16_t roll_pid = pidRollCalculate(rc_roll, roll, 10);
+			motors.motor1 = throttle + roll_pid;
+			motors.motor2 = throttle - roll_pid;
+			if(motors.motor1 > 2000){
 				motors.motor1 = 2000;
 			}
-			if (motors.motor2 > 2000) {
-				motors.motor2 = 2000;
+			if(motors.motor1 < 1000){
+				motors.motor1 = 1000;
 			}
-			if (motors.motor3 > 2000) {
-				motors.motor3 = 2000;
-			}
-			if (motors.motor4 > 2000) {
-				motors.motor4 = 2000;
-			}
-
+			if(motors.motor2 > 2000){
+							motors.motor2 = 2000;
+						}
+						if(motors.motor2 < 1000){
+							motors.motor2 = 1000;
+						}
+			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
 			motor_Write(&motors);
-
-
 		}
-		// else end
+
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -597,7 +410,7 @@ static void MX_USART6_UART_Init(void)
 
   /* USER CODE END USART6_Init 1 */
   huart6.Instance = USART6;
-  huart6.Init.BaudRate = 9600;
+  huart6.Init.BaudRate = 115200;
   huart6.Init.WordLength = UART_WORDLENGTH_8B;
   huart6.Init.StopBits = UART_STOPBITS_1;
   huart6.Init.Parity = UART_PARITY_NONE;

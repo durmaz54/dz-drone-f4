@@ -27,5 +27,8 @@ void ibus_read(UART_HandleTypeDef* uartx, uint16_t* data){
 
 		}
 	}
+	else{
+		data[0] = FAILSAFE_ACTIVE;
+	}
 
 }
