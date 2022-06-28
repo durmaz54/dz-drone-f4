@@ -7,17 +7,17 @@
 
 #include "dz_pid.h"
 
-double ROLL_KP = 1;
-double ROLL_KI = 0.005;
-double ROLL_KD = 0.2;
+double ROLL_KP = 1; 	//2
+double ROLL_KI = 0.3;	//0.5
+double ROLL_KD = 0.3;	//2
 
 double PITCH_KP = 1;
-double PITCH_KI = 0.005;
-double PITCH_KD = 0.2;
+double PITCH_KI = 0.3;
+double PITCH_KD = 0.3;
 
-double YAW_KP = 2;
+double YAW_KP = 0.1;
 double YAW_KI = 0.001;
-double YAW_KD = 0.0;
+double YAW_KD = 0.00;
 
 double roll_p, roll_i, roll_d;
 int16_t previous_error_roll = 0;
@@ -40,46 +40,71 @@ void pidRollChange_KD(double *data) {
 	PITCH_KD = *data;
 }
 
-int16_t pidRollCalculate(int16_t ref, int16_t imu, int16_t dt) {
+int16_t pidRollCalculate(int16_t ref, int16_t imu, double dt) {
 	int16_t hata = imu - ref;
 	roll_p = ROLL_KP * hata;
 
 	if ((-10 < hata) && (hata < 10)) {
-		roll_i = roll_i + (ROLL_KI * hata);
+		roll_i = roll_i + (hata * dt);
 	}
 
 	roll_d = ROLL_KD * ((hata - previous_error_roll) / dt);
-	roll_pid = roll_p + roll_i + roll_d;
+	roll_pid = roll_p + (roll_i * ROLL_KI)+ roll_d;
 
 	previous_error_roll = hata;
+
+	if(roll_pid < -100){
+		roll_pid = -100;
+	}
+	else if(roll_pid > 100){
+		roll_pid = 100;
+	}
+
 	return roll_pid;
 }
 
-int16_t pidPitchCalculate(int16_t ref, int16_t imu, int16_t dt) {
+int16_t pidPitchCalculate(int16_t ref, int16_t imu, double dt) {
 	int16_t hata = imu - ref;
 	pitch_p = PITCH_KP * hata;
 
 	if ((-10 < hata) && (hata < 10)) {
-		pitch_i = pitch_i + (PITCH_KI * hata);
+		pitch_i = pitch_i + (hata * dt);
 	}
 
 	pitch_d = PITCH_KD * ((hata - previous_error_pitch) / dt);
-	pitch_pid = pitch_p + pitch_i + pitch_d;
+	pitch_pid = pitch_p + (pitch_i * PITCH_KI) + pitch_d;
 
 	previous_error_pitch = hata;
+
+	if(pitch_pid < -100){
+		pitch_pid = -100;
+	}
+	else if(pitch_pid > 100){
+		pitch_pid = 100;
+	}
+
 	return pitch_pid;
 }
 
-int16_t pidYawCalculate(int16_t ref, int16_t imu, int16_t dt) {
+int16_t pidYawCalculate(int16_t ref, int16_t imu, double dt) {
 	int16_t hata = imu - ref;
 	yaw_p = YAW_KP * hata;
 
-	yaw_i = yaw_i + (YAW_KI * hata);
+	yaw_i = yaw_i + (hata * dt);
 
 	yaw_d = YAW_KD * ((hata - previous_error_yaw) / dt);
-	yaw_pid = yaw_p + yaw_i + yaw_d;
+	yaw_pid = yaw_p + (yaw_i * YAW_KI) + yaw_d;
 
 	previous_error_yaw = hata;
+
+	if(yaw_pid < -100){
+		yaw_pid = -100;
+	}
+	else if(yaw_pid > 100){
+		yaw_pid = 100;
+	}
+
+
 	return yaw_pid;
 }
 

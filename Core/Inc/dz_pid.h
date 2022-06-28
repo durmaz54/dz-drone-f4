@@ -16,9 +16,9 @@ void pidRollChange_KP(double* data);
 void pidRollChange_KI(double* data);
 void pidRollChange_KD(double* data);
 
-int16_t pidRollCalculate(int16_t ref, int16_t imu, int16_t dt);
-int16_t pidPitchCalculate(int16_t ref, int16_t imu, int16_t dt);
-int16_t pidYawCalculate(int16_t ref, int16_t imu, int16_t dt);
+int16_t pidRollCalculate(int16_t ref, int16_t imu, double dt);
+int16_t pidPitchCalculate(int16_t ref, int16_t imu, double dt);
+int16_t pidYawCalculate(int16_t ref, int16_t imu, double dt);
 
 void pidRollReset();
 void pidYawReset();
