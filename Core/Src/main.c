@@ -109,7 +109,8 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -155,7 +156,7 @@ int main(void)
 
 	while (1) {
 		bno_state = bno055_getCalibrationState();
-		if ((bno_state.gyro >= 0) && (bno_state.mag >= 2)) { // mag >=2
+		if ((bno_state.gyro >= 0) && (bno_state.mag >= 1)) { // mag >=2
 			break;
 		}
 		HAL_Delay(10);
@@ -214,18 +215,18 @@ int main(void)
 		if (1900 < rcData[8] && (rcData[8] < 2100)) {
 			if ((900 < rcData[9]) && (rcData[9] < 1100)) {
 				//p
-				rc_pid = ((double) (rcData[5] - 1000) / 200)
-						+ ((double) (rcData[6] - 1000) / 10000);
+				rc_pid = ((double) (rcData[5] - 1000) / 50)
+						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KP(&rc_pid);
 			} else if ((1400 < rcData[9]) && (rcData[9] < 1600)) {
 				//i
-				rc_pid = ((double) (rcData[5] - 1000) / 200)
-						+ ((double) (rcData[6] - 1000) / 10000);
+				rc_pid = ((double) (rcData[5] - 1000) / 50)
+						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KI(&rc_pid);
 			} else if ((1800 < rcData[9]) && (rcData[9] < 2100)) {
 				//d
-				rc_pid = ((double) (rcData[5] - 1000) / 200)
-						+ ((double) (rcData[6] - 1000) / 10000);
+				rc_pid = ((double) (rcData[5] - 1000) / 50)
+						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KD(&rc_pid);
 			}
 		}
@@ -252,10 +253,10 @@ int main(void)
 			int16_t pitch_pid = pidPitchCalculate(rc_pitch, pitch, dt);
 			int16_t yaw_pid = 0;//pidYawCalculate(rc_yaw, yaw, dt);
 
-			motors.motor1 = (int)(throttle + pitch_pid - roll_pid - yaw_pid);
-			motors.motor2 = (int)(throttle + pitch_pid + roll_pid + yaw_pid);
-			motors.motor3 = (int)(throttle - pitch_pid + roll_pid - yaw_pid);
-			motors.motor4 = (int)(throttle - pitch_pid - roll_pid + yaw_pid);
+			motors.motor1 = (int)(throttle + pitch_pid + roll_pid - yaw_pid);
+			motors.motor2 = (int)(throttle + pitch_pid - roll_pid + yaw_pid);
+			motors.motor3 = (int)(throttle - pitch_pid - roll_pid - yaw_pid);
+			motors.motor4 = (int)(throttle - pitch_pid + roll_pid + yaw_pid);
 
 
 			if (motors.motor1 > 2000) {
