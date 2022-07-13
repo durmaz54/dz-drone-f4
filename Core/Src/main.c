@@ -47,6 +47,7 @@
 I2C_HandleTypeDef hi2c2;
 
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim10;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
@@ -63,8 +64,8 @@ bno055_calibration_state_t bno_state;
 bno055_calibration_data_t bno_data;
 char controlData[50];
 double rc_pid = 0;
-uint32_t time_now = 0, time_res = 0;
-double dt = 0;
+int16_t yaw_ref, pitch_ref, roll_ref;
+int32_t deneme = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +75,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_TIM10_Init(void);
 /* USER CODE BEGIN PFP */
 
 uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min,
@@ -81,12 +83,20 @@ uint16_t map(uint16_t x, uint16_t in_min, uint16_t in_max, uint16_t out_min,
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void ledOn(){
+void ledOn() {
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
 }
 
-void ledOff(){
+void ledOff() {
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+}
+
+void yawCalculate(int16_t *yaw) {
+	*yaw = *yaw % 360;
+
+	if (*yaw > 180) {
+		*yaw -= 360;
+	}
 }
 
 /* USER CODE END PFP */
@@ -109,8 +119,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-
-	HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -129,6 +138,7 @@ int main(void)
   MX_TIM4_Init();
   MX_I2C2_Init();
   MX_USART6_UART_Init();
+  MX_TIM10_Init();
   /* USER CODE BEGIN 2 */
 	// yukarıdaki alanda cubemx önce usart2'yi init ediyor sonra dma'yı init ediyordu bu yanlış.
 	// doğrusu benim kullandığım olacak.
@@ -156,8 +166,14 @@ int main(void)
 
 	while (1) {
 		bno_state = bno055_getCalibrationState();
-		if ((bno_state.gyro >= 0) && (bno_state.mag >= 1)) { // mag >=2
-			break;
+		if (bno_state.gyro >= 3) { // mag >=2
+			if (bno_state.mag >= 3) {
+				break;
+			}
+			ledOff();
+			HAL_Delay(200);
+			ledOn();
+			HAL_Delay(200);
 		}
 		HAL_Delay(10);
 	}
@@ -165,19 +181,38 @@ int main(void)
 	ledOn();
 	HAL_Delay(5000);
 	BNO55_str = bno055_getVectorEuler();
-	int16_t roll_ref = BNO55_str.y;
-	int16_t pitch_ref = BNO55_str.z;
-	int16_t yaw_ref = BNO55_str.x;
+	roll_ref = BNO55_str.y;
+	pitch_ref = BNO55_str.z;
+	yaw_ref = BNO55_str.x;
+
 	/*
-	 while(1){
+
+	 while (1) {
+
+	 ibus_read(&huart2, rcData);
+	 throttle = rcData[3];
+	 rc_roll = (1500 - rcData[1]) / 50;
+	 rc_pitch = ((1500 - rcData[2]) / 50) * -1;
+
+
+	 rc_yaw = 0;
+	 if (rcData[4] > 1500) {
+	 rc_yaw = ((1500 - rcData[4]) / 3);
+	 } else {
+	 rc_yaw = ((1500 - rcData[4]) / 3);
+	 }
+
 	 BNO55_str = bno055_getVectorEuler();
-	 yaw = (int16_t)BNO55_str.x;
-	 roll = (int16_t)BNO55_str.y;
-	 pitch = (int16_t)BNO55_str.z;
+	 yaw = ((int16_t) BNO55_str.x) - yaw_ref;
+	 yawCalculate(&yaw);
+	 roll = (int16_t) BNO55_str.y - roll_ref;
+	 pitch = (int16_t) BNO55_str.z - pitch_ref;
 	 bno_state = bno055_getCalibrationState();
 	 HAL_Delay(10);
 
-	 }	*/
+	 }
+
+	 */
 
   /* USER CODE END 2 */
 
@@ -185,47 +220,40 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
 
-		time_res = time_now;
-
-		time_now = HAL_GetTick();
-
-		dt = (double)(time_now - time_res) / 1000.0000;
-
-
 		ibus_read(&huart2, rcData);
 		throttle = rcData[3];
 		rc_roll = (1500 - rcData[1]) / 50;
 		rc_pitch = ((1500 - rcData[2]) / 50) * -1;
 
-		rc_yaw = 0;
-		if(rcData[4]>1500){
-			rc_yaw = ((1500 - rcData[4]) / 3);
-		}
-		else{
-			rc_yaw = ((1500 - rcData[4]) / 3);
-		}
-
-
 		BNO55_str = bno055_getVectorEuler();
-		yaw = (int16_t) BNO55_str.x - yaw_ref;
+		yaw = ((int16_t) BNO55_str.x) - yaw_ref;
+		yawCalculate(&yaw);
 		roll = (int16_t) BNO55_str.y - roll_ref;
 		pitch = (int16_t) BNO55_str.z - pitch_ref;
+
+		rc_yaw = 0;
+		if (rcData[4] > 1500) {
+			rc_yaw = ((1500 - rcData[4]) / 3);
+		} else {
+			rc_yaw = ((1500 - rcData[4]) / 3);
+		}
+		rc_yaw *= -1;
 
 		//kumanda pid
 		if (1900 < rcData[8] && (rcData[8] < 2100)) {
 			if ((900 < rcData[9]) && (rcData[9] < 1100)) {
 				//p
-				rc_pid = ((double) (rcData[5] - 1000) / 50)
+				rc_pid = ((double) (rcData[5] - 1000) / 100)
 						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KP(&rc_pid);
 			} else if ((1400 < rcData[9]) && (rcData[9] < 1600)) {
 				//i
-				rc_pid = ((double) (rcData[5] - 1000) / 50)
+				rc_pid = ((double) (rcData[5] - 1000) / 100)
 						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KI(&rc_pid);
 			} else if ((1800 < rcData[9]) && (rcData[9] < 2100)) {
 				//d
-				rc_pid = ((double) (rcData[5] - 1000) / 50)
+				rc_pid = ((double) (rcData[5] - 1000) / 100)
 						+ ((double) (rcData[6] - 1000) / 1000);
 				pidRollChange_KD(&rc_pid);
 			}
@@ -233,6 +261,7 @@ int main(void)
 		// kumanda pid
 
 		if ((rcData[0] != FAILSAFE_OFF) | (throttle < 1100)) {
+			HAL_TIM_Base_Stop_IT(&htim10);
 			pidRollReset();
 			pidPitchReset();
 			pidYawReset();
@@ -245,50 +274,9 @@ int main(void)
 			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
 		}
 
-
-
 		else {
-			ledOn();
-			int16_t roll_pid = pidRollCalculate(rc_roll, roll, dt);
-			int16_t pitch_pid = pidPitchCalculate(rc_pitch, pitch, dt);
-			int16_t yaw_pid = 0;//pidYawCalculate(rc_yaw, yaw, dt);
-
-			motors.motor1 = (int)(throttle + pitch_pid + roll_pid - yaw_pid);
-			motors.motor2 = (int)(throttle + pitch_pid - roll_pid + yaw_pid);
-			motors.motor3 = (int)(throttle - pitch_pid - roll_pid - yaw_pid);
-			motors.motor4 = (int)(throttle - pitch_pid + roll_pid + yaw_pid);
-
-
-			if (motors.motor1 > 2000) {
-				motors.motor1 = 2000;
-			}
-			if (motors.motor1 < 1000) {
-				motors.motor1 = 1000;
-			}
-
-			if (motors.motor2 > 2000) {
-				motors.motor2 = 2000;
-			}
-			if (motors.motor2 < 1000) {
-				motors.motor2 = 1000;
-			}
-			if (motors.motor3 > 2000) {
-				motors.motor3 = 2000;
-			}
-			if (motors.motor3 < 1000) {
-				motors.motor3 = 1000;
-			}
-			if (motors.motor4 > 2000) {
-				motors.motor4 = 2000;
-			}
-			if (motors.motor4 < 1000) {
-				motors.motor4 = 1000;
-			}
-			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
-			motor_Write(&motors);
+			HAL_TIM_Base_Start_IT(&htim10);
 		}
-
-
 
     /* USER CODE END WHILE */
 
@@ -437,6 +425,37 @@ static void MX_TIM4_Init(void)
 }
 
 /**
+  * @brief TIM10 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM10_Init(void)
+{
+
+  /* USER CODE BEGIN TIM10_Init 0 */
+
+  /* USER CODE END TIM10_Init 0 */
+
+  /* USER CODE BEGIN TIM10_Init 1 */
+
+  /* USER CODE END TIM10_Init 1 */
+  htim10.Instance = TIM10;
+  htim10.Init.Prescaler = 999;
+  htim10.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim10.Init.Period = 839;
+  htim10.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim10.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim10) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM10_Init 2 */
+
+  /* USER CODE END TIM10_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -537,28 +556,57 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-/* USER CODE END 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
-/**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM1 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  /* USER CODE BEGIN Callback 0 */
+	if (htim->Instance == htim10.Instance) {
 
-  /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM1) {
-    HAL_IncTick();
-  }
-  /* USER CODE BEGIN Callback 1 */
+		ledOn();
+		int16_t roll_pid =  pidRollCalculate(rc_roll, roll);
+		int16_t pitch_pid = pidPitchCalculate(rc_pitch, pitch);
+		int16_t yaw_pid = pidYawCalculate(rc_yaw, yaw);
 
-  /* USER CODE END Callback 1 */
+		motors.motor1 = (int) (throttle - pitch_pid + roll_pid + yaw_pid);
+		motors.motor2 = (int) (throttle - pitch_pid - roll_pid - yaw_pid);
+		motors.motor3 = (int) (throttle + pitch_pid - roll_pid + yaw_pid);
+		motors.motor4 = (int) (throttle + pitch_pid + roll_pid - yaw_pid);
+
+		if (motors.motor1 > 1800) {
+			motors.motor1 = 1800;
+		}
+		if (motors.motor1 < 1100) {
+			motors.motor1 = 1100;
+		}
+
+		if (motors.motor2 > 1800) {
+			motors.motor2 = 1800;
+		}
+		if (motors.motor2 < 1100) {
+			motors.motor2 = 1100;
+		}
+		if (motors.motor3 > 1800) {
+			motors.motor3 = 1800;
+		}
+		if (motors.motor3 < 1100) {
+			motors.motor3 = 1100;
+		}
+		if (motors.motor4 > 1800) {
+			motors.motor4 = 1800;
+		}
+		if (motors.motor4 < 1100) {
+			motors.motor4 = 1100;
+		}
+		//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+		motor_Write(&motors);
+
+		deneme += 1;
+		if (deneme > 2000) {
+			deneme = 0;
+		}
+
+	}
 }
+
+/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
