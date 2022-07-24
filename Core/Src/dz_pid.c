@@ -7,16 +7,16 @@
 
 #include "dz_pid.h"
 
-double ROLL_KP = 1.5; 	//
-double ROLL_KI = 1;	//
+double ROLL_KP = 1; 	//
+double ROLL_KI = 0.7;	//
 double ROLL_KD = 0.7;	//
 
-double PITCH_KP = 1.5;
-double PITCH_KI = 1;
+double PITCH_KP = 1;
+double PITCH_KI = 0.7;
 double PITCH_KD = 0.7;
 
-double YAW_KP = 0.5; // 3 - 1
-double YAW_KI = 1.5;
+double YAW_KP = 1; // 3 - 1
+double YAW_KI = 1;
 double YAW_KD = 0.0;
 
 double roll_p, roll_i, roll_d;
