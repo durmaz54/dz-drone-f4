@@ -22,7 +22,7 @@ void pidRollChange_KD(double* data);
 int16_t pidRollCalculate(int16_t ref, int16_t imu);
 int16_t pidPitchCalculate(int16_t ref, int16_t imu);
 int16_t pidYawCalculate(int16_t ref, int16_t imu);
-
+void pid_yawChange(int16_t* imu);
 void pidRollReset();
 void pidYawReset();
 void pidPitchReset();

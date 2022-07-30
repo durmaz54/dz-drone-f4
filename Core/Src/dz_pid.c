@@ -8,15 +8,15 @@
 #include "dz_pid.h"
 
 double ROLL_KP = 1; 	//
-double ROLL_KI = 0.7;	//
-double ROLL_KD = 0.7;	//
+double ROLL_KI = 0.8;	//
+double ROLL_KD = 0.8;	//
 
 double PITCH_KP = 1;
-double PITCH_KI = 0.7;
-double PITCH_KD = 0.7;
+double PITCH_KI = 0.8;
+double PITCH_KD = 0.8;
 
 double YAW_KP = 1; // 3 - 1
-double YAW_KI = 1;
+double YAW_KI = 1.5;
 double YAW_KD = 0.0;
 
 double roll_p, roll_i, roll_d;
@@ -26,6 +26,7 @@ int16_t previous_error_yaw = 0;
 double yaw_p, yaw_i, yaw_d;
 double pitch_p, pitch_i, pitch_d;
 int16_t roll_pid, yaw_pid, pitch_pid;
+int16_t imu_previous_yaw = 0;
 
 void pidRollChange_KP(double *data) {
 
@@ -96,6 +97,8 @@ int16_t pidPitchCalculate(int16_t ref, int16_t imu) {
 
 int16_t pidYawCalculate(int16_t ref, int16_t imu) {
 
+	pid_yawChange(&imu);
+
 	int16_t hata = ref - imu;
 
 	yaw_p = YAW_KP * (double)hata;
@@ -129,4 +132,30 @@ void pidYawReset() {
 void pidPitchReset() {
 	pitch_i = 0;
 }
+
+
+
+void pid_yawChange(int16_t* imu){
+	int16_t yawanglechangedelta = *imu - imu_previous_yaw;
+
+	  if (yawanglechangedelta > 180) {
+	    yawanglechangedelta - 360;
+	  } else if (yawanglechangedelta < -180) {
+	    yawanglechangedelta + 360;
+	  }
+
+	yawanglechangedelta *= 100;
+
+	imu_previous_yaw = *imu;
+
+
+	*imu = yawanglechangedelta;
+}
+
+
+
+
+
+
+
 
