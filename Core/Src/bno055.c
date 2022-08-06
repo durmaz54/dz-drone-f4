@@ -64,6 +64,7 @@ int8_t bno055_setup() {
   bno055_readData(BNO055_CHIP_ID, &id, 1);
   if (id != BNO055_ID) {
     printf("Can't find BNO055, id: 0x%02x. Please check your wiring.\r\n", id);
+
     bno055_delay(50);
     return 1;
   }
@@ -121,7 +122,10 @@ bno055_calibration_state_t bno055_getCalibrationState() {
   bno055_setPage(0);
   bno055_calibration_state_t cal = {.sys = 0, .gyro = 0, .mag = 0, .accel = 0};
   uint8_t calState = 0;
-  bno055_readData(BNO055_CALIB_STAT, &calState, 1);
+  if(bno055_readData(BNO055_CALIB_STAT, &calState, 1) == -1){
+	  cal.gyro = 10;
+	  return cal;
+  }
   cal.sys = (calState >> 6) & 0x03;
   cal.gyro = (calState >> 4) & 0x03;
   cal.accel = (calState >> 2) & 0x03;
