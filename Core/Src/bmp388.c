@@ -91,7 +91,7 @@ int8_t BMP388_init() {
     rslt = bmp3_set_op_mode(&settings, &dev);
 
 
-    kalman(40, 40, 0.02);
+    kalman(20, 20, 0.01);
 
     HAL_Delay(500);
 

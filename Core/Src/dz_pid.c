@@ -7,43 +7,69 @@
 
 #include "dz_pid.h"
 
-double ROLL_KP = 1; 	//
-double ROLL_KI = 0.8;	//
-double ROLL_KD = 0.8;	//
+double ROLL_KP = 3; 	//	1 , 1.2 , 1.8
+double ROLL_KI = 1.5;	//	0.8
+double ROLL_KD = 6.5;	// 0.8
 
-double PITCH_KP = 1;
-double PITCH_KI = 0.8;
-double PITCH_KD = 0.8;
+double PITCH_KP = 3;	//2.5 , 0.6 2,5
+double PITCH_KI = 1.5;
+double PITCH_KD = 6.5;
 
-double YAW_KP = 1; // 3 - 1
-double YAW_KI = 1.5;
-double YAW_KD = 0.0;
+double YAW_KP = 2; // 1, 1.5
+double YAW_KI = 1.0;
+double YAW_KD = 0;
+
+double THR_KP = 0.0002; // 3 - 1
+double THR_KI = 0.0002;
+double THR_KD = 0.0;
 
 double roll_p, roll_i, roll_d;
+double thr_p, thr_i, thr_d;
+int16_t previous_error_thr = 0;
 int16_t previous_error_roll = 0;
 int16_t previous_error_pitch = 0;
 int16_t previous_error_yaw = 0;
 double yaw_p, yaw_i, yaw_d;
 double pitch_p, pitch_i, pitch_d;
-int16_t roll_pid, yaw_pid, pitch_pid;
+int16_t roll_pid, yaw_pid, pitch_pid, thr_pid;
 int16_t imu_previous_yaw = 0;
 
-void pidRollChange_KP(double *data) {
 
-	//ROLL_KP = *data;
-	//PITCH_KP = *data;
-	YAW_KP = *data;
+void pidChange_KP(uint8_t id,	uint16_t data){
+	if(id == PITCH_ID){
+		PITCH_KP = ((double)data / (double)10);
+	}
+	else if(id == YAW_ID){
+		YAW_KP = ((double)data / (double)10);
+	}
+	else if(id == ROLL_ID){
+		ROLL_KP = ((double)data / (double)10);
+	}
 }
-void pidRollChange_KI(double *data) {
-	//ROLL_KI = *data;
-	//PITCH_KI = *data;
-	YAW_KI = *data;
+
+void pidChange_KI(uint8_t id,	uint16_t data){
+	if(id == PITCH_ID){
+		PITCH_KI = ((double)data / (double)10);
+	}
+	else if(id == YAW_ID){
+		YAW_KI = ((double)data / (double)10);
+	}
+	else if(id == ROLL_ID){
+		ROLL_KI = ((double)data / (double)10);
+	}
 }
-void pidRollChange_KD(double *data) {
-	//ROLL_KD = *data;
-	//PITCH_KD = *data;
-	//YAW_KD = *data;
+void pidChange_KD(uint8_t id,	uint16_t data){
+	if(id == PITCH_ID){
+		PITCH_KD = ((double)data / (double)10);
+	}
+	else if(id == YAW_ID){
+		YAW_KD = ((double)data / (double)10);
+	}
+	else if(id == ROLL_ID){
+		ROLL_KD = ((double)data / (double)10);
+	}
 }
+
 
 int16_t pidRollCalculate(int16_t ref, int16_t imu) {
 
@@ -53,7 +79,6 @@ int16_t pidRollCalculate(int16_t ref, int16_t imu) {
 
 	roll_d = ROLL_KD * (double)(hata - previous_error_roll) / DELTAT;
 
-	roll_i += (double)hata * DELTAT;
 
 	roll_pid = (int16_t)(roll_p + (roll_i * ROLL_KI) + roll_d);
 
@@ -79,6 +104,8 @@ int16_t pidPitchCalculate(int16_t ref, int16_t imu) {
 	pitch_d = PITCH_KD * (double)(hata - previous_error_pitch) / DELTAT;
 
 	pitch_i += (double)hata * DELTAT;
+
+
 
 	pitch_pid = (int16_t)(pitch_p + (pitch_i * PITCH_KI) + pitch_d);
 
@@ -123,6 +150,39 @@ int16_t pidYawCalculate(int16_t ref, int16_t imu) {
 
 }
 
+
+int16_t pidThrottleCalculate(int16_t ref, int32_t elevation){
+
+		int16_t hata = ref - elevation;
+
+		thr_p = THR_KP * (double)hata;
+
+		thr_d = THR_KD * (double)(hata - previous_error_thr) / DELTAT;
+
+		thr_i += (double)hata * DELTAT;
+
+		thr_pid = (int16_t)(thr_p + (thr_i * THR_KI) + thr_d);
+
+		previous_error_thr = hata;
+
+		if(thr_pid > 400){
+			thr_pid = 400;
+		}
+
+		else if(thr_pid < -400){
+			thr_pid = -400;
+		}
+
+		return thr_pid;
+
+}
+
+
+void pidThrottleReset(){
+	thr_i = 0;
+}
+
+
 void pidRollReset() {
 	roll_i = 0;
 }
@@ -139,10 +199,11 @@ void pid_yawChange(int16_t* imu){
 	int16_t yawanglechangedelta = *imu - imu_previous_yaw;
 
 	  if (yawanglechangedelta > 180) {
-	    yawanglechangedelta - 360;
+		    yawanglechangedelta - 360;
 	  } else if (yawanglechangedelta < -180) {
-	    yawanglechangedelta + 360;
+		    yawanglechangedelta + 360;
 	  }
+
 
 	yawanglechangedelta *= 100;
 
@@ -151,7 +212,6 @@ void pid_yawChange(int16_t* imu){
 
 	*imu = yawanglechangedelta;
 }
-
 
 
 

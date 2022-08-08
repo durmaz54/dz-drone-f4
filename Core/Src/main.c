@@ -29,6 +29,7 @@
 #include "math.h"
 #include "dz_pid.h"
 #include "bmp388.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,12 +57,14 @@ TIM_HandleTypeDef htim10;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
+DMA_HandleTypeDef hdma_usart2_rx;
 
 /* USER CODE BEGIN PV */
 
 uint16_t rcData[16];
+uint8_t rxJetson[10], rxAutonom[10];
 struct motors motors;
-int16_t yaw, pitch, roll, throttle;
+int16_t yaw, pitch, roll, throttle, thr = 1100;
 int16_t gyro, acc, mag;
 int16_t rc_yaw, rc_pitch, rc_roll;
 bno055_vector_t BNO55_str;
@@ -71,10 +74,11 @@ char controlData[30], rxData[30];
 double rc_pid = 0;
 int16_t yaw_ref, pitch_ref, roll_ref;
 int32_t deneme = 0;
-int16_t yaw_pid, roll_pid, pitch_pid;
+int16_t yaw_pid, roll_pid, pitch_pid, thr_pid;
 BMP388_t bmpdata;
 int16_t yaw_temp;
-
+bool isAutonom = false;
+int16_t rise;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -86,6 +90,7 @@ static void MX_I2C2_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM10_Init(void);
 static void MX_I2C3_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -122,6 +127,36 @@ void yawCalculate(int16_t *yaw) {
 	}
 }
 
+void escCalibration() {
+
+	while (1) {
+		ibus_read(IBUS_PORT, rcData);
+
+		if (rcData[3] > 1800) {
+			ledOn();
+		} else {
+			ledOff();
+		}
+
+		motors.motor1 = rcData[3];
+		motors.motor2 = rcData[3];
+		motors.motor3 = rcData[3];
+		motors.motor4 = rcData[3];
+
+		if ((rcData[0] != FAILSAFE_OFF)) {
+			motors.motor1 = 1000;
+			motors.motor2 = 1000;
+			motors.motor3 = 1000;
+			motors.motor4 = 1000;
+		}
+
+		motor_Write(&motors);
+
+		HAL_Delay(20);
+	}
+
+}
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -142,7 +177,8 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-HAL_Init();
+
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -157,6 +193,8 @@ HAL_Init();
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
+
   MX_USART2_UART_Init();
   MX_TIM4_Init();
   MX_I2C2_Init();
@@ -167,56 +205,23 @@ HAL_Init();
   /* USER CODE BEGIN 2 */
 	// yukarıdaki alanda cubemx önce usart2'yi init ediyor sonra dma'yı init ediyordu bu yanlış.
 	// doğrusu benim kullandığım olacak.
+
+
+	HAL_UART_Receive_DMA(&huart2, rxJetson, 10);
+
+
 	motors.timx = &htim4;
 	motor_Init(&motors);
 
-	/*
-	while(1){
-		ibus_read(IBUS_PORT, rcData);
+	while (BMP388_init()) {
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, RESET);
 
+		HAL_Delay(300);
 
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, ENABLE);
 
-
-		if(rcData[3] > 1900){
-			ledOn();
-		}
-		else {
-			ledOff();
-		}
-
-
-		motors.motor1 = rcData[3];
-		motors.motor2 = rcData[3];
-		motors.motor3 = rcData[3];
-		motors.motor4 = rcData[3];
-
-		if((rcData[0] != FAILSAFE_OFF) ){
-			motors.motor1 = 1000;
-			motors.motor2 = 1000;
-			motors.motor3 = 1000;
-						motors.motor4 = 1000;
-		}
-
-		motor_Write(&motors);
-
-
-
-		HAL_Delay(20);
+		HAL_Delay(300);
 	}
-	*/
-
-	/*
-	 while (BMP388_init()) {
-	 HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, RESET);
-
-	 HAL_Delay(300);
-
-	 HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, ENABLE);
-
-	 HAL_Delay(300);
-	 }
-	*/
-
 
 	bno055_assignI2C(&hi2c2);
 
@@ -242,18 +247,10 @@ HAL_Init();
 			if (bno_state.mag >= 3) {
 				break;
 			}
-			sprintf(controlData, "gyro = %d ac=%d mag=%d\n", bno_state.gyro,
-					bno_state.accel, bno_state.mag);
-
-			HAL_UART_Transmit(&huart6, controlData, 30, 10);
 			ledOnBlue();
 			HAL_Delay(1000);
 		}
 
-		sprintf(controlData, "gyro = %d ac=%d mag=%d\n", bno_state.gyro,
-				bno_state.accel, bno_state.mag);
-
-		HAL_UART_Transmit(&huart6, controlData, 30, 10);
 
 		HAL_Delay(1000);
 	}
@@ -272,20 +269,29 @@ HAL_Init();
 		HAL_Delay(100);
 	}
 
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
 
+
+
 		ibus_read(IBUS_PORT, rcData);
 		throttle = rcData[3];
-		rc_roll = (1500 - rcData[1]) / 50;
-		rc_pitch = ((1500 - rcData[2]) / 50) * -1;
 
+		if ((rcData[7] > 1600) && (rcData[7] < 2100)) {
+			isAutonom = true;
+			rise = throttle - 1000;
+		} else {
+			isAutonom = false;
+		}
 
-		rc_yaw = (int16_t)((1500 - rcData[4]) / 5);
+		rc_roll = (1500 - rcData[1]) / 25;
+
+		rc_pitch = ((1500 - rcData[2]) / 25) * -1;
+
+		rc_yaw = (int16_t) ((1500 - rcData[4]) / 5);
 		rc_yaw *= -1;
 
 		BNO55_str = bno055_getVectorEuler();
@@ -294,8 +300,10 @@ HAL_Init();
 		roll = (int16_t) BNO55_str.y - roll_ref;
 		pitch = (int16_t) BNO55_str.z - pitch_ref;
 
-		sprintf(controlData, "yaw= %d rc = %d temp=%.2f \n", yaw, rc_yaw,	yaw_temp);
+		//BMP388_Read(&bmpdata);
 
+		sprintf(controlData, "dz-%d-%d-%d-%d-%d-%d-son \n", rc_pitch, pitch, rc_roll, roll,rc_yaw,yaw);
+		//sprintf(controlData, "dz-%d-son\n", rc_pitch);s
 		HAL_UART_Transmit(&huart6, controlData, 30, 10);
 
 		if ((rcData[0] != FAILSAFE_OFF) | (throttle < 1100)) {
@@ -303,6 +311,7 @@ HAL_Init();
 			pidRollReset();
 			pidPitchReset();
 			pidYawReset();
+			pidThrottleReset();
 			motors.motor1 = 1000;
 			motors.motor2 = 1000;
 			motors.motor3 = 1000;
@@ -310,7 +319,7 @@ HAL_Init();
 			motor_Write(&motors);
 			ledOff();
 			ledOnBlue();
-			 MX_USART1_UART_Init();
+			MX_USART1_UART_Init();
 
 			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, ENABLE);
 		}
@@ -318,6 +327,7 @@ HAL_Init();
 		else {
 			HAL_TIM_Base_Start_IT(&htim10);
 			ledOffBlue();
+
 		}
 
     /* USER CODE END WHILE */
@@ -584,7 +594,7 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.Mode = UART_MODE_RX;
   huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   if (HAL_UART_Init(&huart2) != HAL_OK)
@@ -631,6 +641,22 @@ static void MX_USART6_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -673,8 +699,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		roll_pid = pidRollCalculate(rc_roll, roll);
 		pitch_pid = pidPitchCalculate(rc_pitch, pitch);
 		yaw_pid = pidYawCalculate(rc_yaw, yaw);
-
 		yaw_pid *= -1;
+
+		if (isAutonom == true) {
+			thr_pid = pidThrottleCalculate(rise, bmpdata.Altitude);
+			thr += thr_pid;
+
+			//throttle = thr;
+		}
 
 		motors.motor1 = (int) (throttle - pitch_pid + roll_pid - yaw_pid);
 		motors.motor2 = (int) (throttle - pitch_pid - roll_pid + yaw_pid);
@@ -712,7 +744,60 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	}
 }
 
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart) {
+	deneme += 1;
+}
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	uint8_t data1, data2;
+	uint16_t data;
+	/*
+	if((rxJetson[0] == 'd') && rxJetson[1] == 'z' ){
+		if(rxJetson[2] == 'p'){
+			data1 = stoi(rxJetson[3]);
+			data2 = stoi(rxJetson[4]);
+			data = data1*10 + data2;
+			pidChange_KP(PITCH_ID, data);
+			data1 = stoi(rxJetson[5]);
+			data2 = stoi(rxJetson[6]);
+			data = data1*10 + data2;
+			pidChange_KI(PITCH_ID, data);
+			data1 = stoi(rxJetson[7]);
+			data2 = stoi(rxJetson[8]);
+			data = data1*10 + data2;
+			pidChange_KD(PITCH_ID, data);
+		}
+		else if(rxJetson[2] == 'r'){
+			data1 = stoi(rxJetson[3]);
+			data2 = stoi(rxJetson[4]);
+			data = data1*10 + data2;
+			pidChange_KP(ROLL_ID, data);
+			data1 = stoi(rxJetson[5]);
+			data2 = stoi(rxJetson[6]);
+			data = data1*10 + data2;
+			pidChange_KI(ROLL_ID, data);
+			data1 = stoi(rxJetson[7]);
+			data2 = stoi(rxJetson[8]);
+			data = data1*10 + data2;
+			pidChange_KD(ROLL_ID, data);
+		}
+		else {
+			data1 = stoi(rxJetson[3]);
+			data2 = stoi(rxJetson[4]);
+			data = data1*10 + data2;
+			pidChange_KP(YAW_ID, data);
+			data1 = stoi(rxJetson[5]);
+			data2 = stoi(rxJetson[6]);
+			data = data1*10 + data2;
+			pidChange_KI(YAW_ID, data);
+			data1 = stoi(rxJetson[7]);
+			data2 = stoi(rxJetson[8]);
+			data = data1*10 + data2;
+			pidChange_KD(YAW_ID, data);
+		}
+
+	}*/
+	HAL_UART_Receive_DMA(&huart2, rxJetson, 10);
 
 }
 
